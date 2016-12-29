@@ -1,5 +1,7 @@
 package main
 
+import notify "github.com/mqu/go-notify"
+
 import (
 	"fmt"
 	"os"
@@ -18,6 +20,7 @@ type wdesc struct {
 type watch_struct struct {
 	fd         int
 	watch_list map[string]*wdesc
+	objects    map[uint32]string
 }
 
 var event_type = [7]uint32{unix.IN_CREATE, unix.IN_DELETE, unix.IN_MODIFY,
@@ -36,6 +39,7 @@ func create_watch() (*watch_struct, error) {
 	inotify_object := &watch_struct{
 		fd:         fd,
 		watch_list: make(map[string]*wdesc),
+		objects:    make(map[uint32]string),
 	}
 
 	go inotify_object.readEvent()
@@ -44,15 +48,14 @@ func create_watch() (*watch_struct, error) {
 
 }
 
-func (inotify_object *watch_struct) add_watch(d string) error {
-	wd, err := unix.InotifyAddWatch(inotify_object.fd, d, event_type[0]|
-		event_type[1]|event_type[2]|event_type[3]|event_type[4]|event_type[5]|
-		event_type[6])
+func (inotify_object *watch_struct) add_watch(d string) uint32 {
+	wd, err := unix.InotifyAddWatch(inotify_object.fd, d, unix.IN_ALL_EVENTS)
 	if err != nil {
 		fmt.Println(err)
 	}
 	inotify_object.watch_list[d] = &wdesc{wd: uint32(wd)}
-	return nil
+	inotify_object.objects[uint32(wd)] = d
+	return uint32(wd)
 }
 
 func (inotify_object *watch_struct) readEvent() {
@@ -72,78 +75,117 @@ func (inotify_object *watch_struct) readEvent() {
 		for i < uint32(length-unix.SizeofInotifyEvent) {
 			event := (*unix.InotifyEvent)(unsafe.Pointer(&p[i]))
 
+			wd := uint32(event.Wd)
 			mask := uint32(event.Mask)
 			lenN := uint32(event.Len)
 
 			if lenN != 0 {
-				detectEvent(mask, event_type[:], i, p[:], lenN)
+				//fmt.Println(event)
+				detectEvent(inotify_object, wd, inotify_object.objects[wd], mask, event_type[:], i, p[:], lenN)
 			}
 			i += unix.SizeofInotifyEvent + lenN
 		}
 	}
 }
 
-func detectEvent(mask uint32, event_type []uint32, i uint32, p []byte, lenN uint32) {
+func detectEvent(inotify_object *watch_struct, wd uint32, path string, mask uint32, event_type []uint32, i uint32, p []byte, lenN uint32) {
+	//fmt.Println(path)
 	bytes := (*[unix.PathMax]byte)(unsafe.Pointer(
 		&p[i+unix.SizeofInotifyEvent]))
 	evName := strings.TrimRight(string(bytes[0:lenN]), "\000")
-	if (mask & event_type[0]) != 0 {
+	if mask == event_type[0] {
 		if mask&file_type != 0 {
-			fmt.Printf("New dir %v has been created\n", evName)
+			fmt.Printf("New dir %v has been created in %v\n", evName, path)
+			noty(evName, path, 0, 0)
 		} else {
-			fmt.Printf("New file %v has been created\n", evName)
+			fmt.Printf("New file %v has been created in %v\n", evName, path)
+			noty(evName, path, 1, 0)
 		}
 	}
-	if (mask & event_type[1]) != 0 {
+	if (mask == event_type[1]) ||
+		(mask == event_type[6]) {
 		if mask&file_type != 0 {
-			fmt.Printf("New dir %v has been deleted\n", evName)
+			fmt.Printf("Dir %v has been deleted in %v\n", evName, path)
+			noty(evName, path, 0, 1)
 		} else {
-			fmt.Printf("New file %v has been deleted\n", evName)
+			fmt.Printf("New file %v has been deleted in %v\n", evName, path)
+			noty(evName, path, 1, 1)
 		}
 	}
-	if (mask & event_type[2]) != 0 {
+	if mask == event_type[6] {
+		totName := evName + path
 		if mask&file_type != 0 {
-			fmt.Printf("New dir %v has been modified\n", evName)
+			fmt.Printf("Dir %v has been deleted\n", totName)
+			noty(evName, path, 0, 1)
 		} else {
-			fmt.Printf("New file %v has been modified\n", evName)
+			fmt.Printf("File %v has been deleted\n", totName)
+			noty(evName, path, 1, 1)
 		}
 	}
-	if (mask & event_type[3]) != 0 {
+	if mask == event_type[2] {
 		if mask&file_type != 0 {
-			fmt.Printf("New dir %v has been created\n", evName)
+			fmt.Printf("New dir %v has been modified in %v\n", evName, path)
+			noty(evName, path, 0, 2)
 		} else {
-			fmt.Printf("New file %v has been created\n", evName)
+			fmt.Printf("New file %v has been modified in %v\n", evName, path)
+			noty(evName, path, 1, 2)
 		}
 	}
-	if (mask & event_type[4]) != 0 {
-		if mask&file_type != 0 {
-			fmt.Printf("New dir %v has been deleted\n", evName)
-		} else {
-			fmt.Printf("New file %v has been deleted\n", evName)
+	if mask == event_type[3] {
+		_, ok := inotify_object.objects[wd]
+		if ok {
+			if mask&file_type != 0 {
+				fmt.Printf("Dir %v has been moved from %v\n", evName, path)
+				noty(evName, path, 0, 3)
+			} else {
+				fmt.Printf("File %v has been moved from %v\n", evName, path)
+				noty(evName, path, 1, 3)
+			}
 		}
 	}
-	if (mask & event_type[5]) != 0 {
-		if mask&file_type != 0 {
-			fmt.Printf("Dir %v has been moved\n", evName)
-		} else {
-			fmt.Printf("File %v has been moved\n", evName)
+	if mask == event_type[4] {
+		_, ok := inotify_object.objects[wd]
+		if ok {
+			if mask&file_type != 0 {
+				fmt.Printf("Dir %v has been moved to %v\n", evName, path)
+				noty(evName, path, 0, 4)
+			} else {
+				fmt.Printf("File %v has been moved to %v\n", evName, path)
+				noty(evName, path, 1, 4)
+			}
 		}
 	}
-	if (mask & event_type[6]) != 0 {
-		if mask&file_type != 0 {
-			fmt.Printf("Dir %v has been deleted\n", evName)
-		} else {
-			fmt.Printf("File %v has been deleted\n", evName)
-		}
+}
+
+func noty(d string, path string, types int, action int) {
+	var text string
+	var subj = [2]string{"Dir ", "File "}
+	var act = [5]string{" created.", " deleted.", " modified", " moved from ", " moved to "}
+
+	notify.Init("GO-notify")
+
+	if action < 3 {
+		text = subj[types] + d + act[action]
+	} else {
+		text = subj[types] + d + act[action] + path
 	}
+
+	notific := notify.NotificationNew("GO-Notify", text, "")
+	notify.NotificationSetTimeout(notific, 3000)
+	if e := notify.NotificationShow(notific); e != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", e.Message())
+		return
+	}
+	notify.NotificationClose(notific)
+	notify.UnInit()
 }
 
 func recList(dir string, wd *watch_struct) error {
 
 	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		absPath, _ := filepath.Abs(path)
+		wd.add_watch(absPath)
 		if info.IsDir() {
-			absPath, _ := filepath.Abs(path)
-			wd.add_watch(absPath)
 			fmt.Printf("DIR: %v.   (Just added to watch list)\n", absPath)
 		} else {
 			fmt.Printf("f |__ %v\n", filepath.Base(path))
@@ -167,6 +209,7 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
+	//fmt.Println(wd.)
 	wd.readEvent()
 
 }

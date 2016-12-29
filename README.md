@@ -7,11 +7,15 @@ GoNotify
 
 It looks recursively under a folder and warn you when a file or a folder has been created, deleted or moved.
 
-It is in early stages...
+Library `libnotify` of your distribution needed.
+
+For notification through `libnotify` has been used the library from:
+[github.com/mqu/go-notify](github.com/mqu/go-notify)
 
 > Usage: `gonotify FOLDER_PATH`
 
 Next steps:
 
-- Add to watch list new folder created.
-- Libnotify implementation.
+- Add to watch list new folder created. --> done.
+- Libnotify implementation. --> done.
+- GUI Implementation?
