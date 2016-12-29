@@ -80,7 +80,7 @@ func (inotify_object *watch_struct) readEvent() {
 			lenN := uint32(event.Len)
 
 			if lenN != 0 {
-				//fmt.Println(event)
+				fmt.Println(event)
 				detectEvent(inotify_object, wd, inotify_object.objects[wd], mask, event_type[:], i, p[:], lenN)
 			}
 			i += unix.SizeofInotifyEvent + lenN
@@ -93,7 +93,7 @@ func detectEvent(inotify_object *watch_struct, wd uint32, path string, mask uint
 	bytes := (*[unix.PathMax]byte)(unsafe.Pointer(
 		&p[i+unix.SizeofInotifyEvent]))
 	evName := strings.TrimRight(string(bytes[0:lenN]), "\000")
-	if mask == event_type[0] {
+	if mask&event_type[0] != 0 {
 		if mask&file_type != 0 {
 			fmt.Printf("New dir %v has been created in %v\n", evName, path)
 			noty(evName, path, 0, 0)
@@ -102,8 +102,8 @@ func detectEvent(inotify_object *watch_struct, wd uint32, path string, mask uint
 			noty(evName, path, 1, 0)
 		}
 	}
-	if (mask == event_type[1]) ||
-		(mask == event_type[6]) {
+	if (mask&event_type[1] != 0) ||
+		(mask&event_type[6] != 0) {
 		if mask&file_type != 0 {
 			fmt.Printf("Dir %v has been deleted in %v\n", evName, path)
 			noty(evName, path, 0, 1)
@@ -112,7 +112,7 @@ func detectEvent(inotify_object *watch_struct, wd uint32, path string, mask uint
 			noty(evName, path, 1, 1)
 		}
 	}
-	if mask == event_type[6] {
+	if mask&event_type[6] != 0 {
 		totName := evName + path
 		if mask&file_type != 0 {
 			fmt.Printf("Dir %v has been deleted\n", totName)
@@ -122,7 +122,7 @@ func detectEvent(inotify_object *watch_struct, wd uint32, path string, mask uint
 			noty(evName, path, 1, 1)
 		}
 	}
-	if mask == event_type[2] {
+	if mask&event_type[2] != 0 {
 		if mask&file_type != 0 {
 			fmt.Printf("New dir %v has been modified in %v\n", evName, path)
 			noty(evName, path, 0, 2)
@@ -131,7 +131,7 @@ func detectEvent(inotify_object *watch_struct, wd uint32, path string, mask uint
 			noty(evName, path, 1, 2)
 		}
 	}
-	if mask == event_type[3] {
+	if mask&event_type[3] != 0 {
 		_, ok := inotify_object.objects[wd]
 		if ok {
 			if mask&file_type != 0 {
@@ -143,7 +143,7 @@ func detectEvent(inotify_object *watch_struct, wd uint32, path string, mask uint
 			}
 		}
 	}
-	if mask == event_type[4] {
+	if mask&event_type[4] != 0 {
 		_, ok := inotify_object.objects[wd]
 		if ok {
 			if mask&file_type != 0 {
@@ -160,15 +160,11 @@ func detectEvent(inotify_object *watch_struct, wd uint32, path string, mask uint
 func noty(d string, path string, types int, action int) {
 	var text string
 	var subj = [2]string{"Dir ", "File "}
-	var act = [5]string{" created.", " deleted.", " modified", " moved from ", " moved to "}
+	var act = [5]string{" created in ", " deleted in ", " modified in ", " moved from ", " moved to "}
 
 	notify.Init("GO-notify")
 
-	if action < 3 {
-		text = subj[types] + d + act[action]
-	} else {
-		text = subj[types] + d + act[action] + path
-	}
+	text = subj[types] + d + act[action] + path
 
 	notific := notify.NotificationNew("GO-Notify", text, "")
 	notify.NotificationSetTimeout(notific, 3000)

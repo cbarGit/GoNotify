@@ -16,6 +16,6 @@ For notification through `libnotify` has been used the library from:
 
 Next steps:
 
-- Add to watch list new folder created. --> done.
+- Add to watch list new folder created.
 - Libnotify implementation. --> done.
 - GUI Implementation?
