@@ -10,7 +10,7 @@ It looks recursively under a folder and warn you when a file or a folder has bee
 Library `libnotify` of your distribution needed.
 
 For notification through `libnotify` has been used the library from:
-[github.com/mqu/go-notify](github.com/mqu/go-notify)
+https://github.com/mqu/go-notify
 
 > Usage: `gonotify FOLDER_PATH`
 
