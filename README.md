@@ -16,6 +16,7 @@ https://github.com/mqu/go-notify
 
 Next steps:
 
-- Add to watch list new folder created.
+- Add to watch list new folder created. --> done.
 - Libnotify implementation. --> done.
+- Handle "rename" file/folder problem. Now alert only with `IN_MOVED_FROM` and `IN_MOVED_TO`.
 - GUI Implementation?
